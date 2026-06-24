@@ -445,7 +445,7 @@ agentic-profile-matching/
      - The 3-round screening funnel narrowing candidates
      - A match report with evidence excerpts
      - Mid-conversation requirement refinement (the re-ranking + delta summary)
-     - The LLM status badge reflecting the actual working provider
+     - The LLM status badge reflecting the actual working provider.
 -->
 
 ---
