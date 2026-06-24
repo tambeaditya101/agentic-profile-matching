@@ -1,0 +1,31 @@
+Senior React Frontend Developer
+
+About the Role
+We are looking for a Senior React Frontend Developer to join our engineering team. You will be responsible for building and maintaining our customer-facing web application used by over 100,000 users daily.
+
+Required Qualifications
+- 5+ years of professional experience in frontend development
+- Expert-level proficiency in React and TypeScript
+- Strong experience with state management (Redux, Zustand, or Context API)
+- Experience building responsive, accessible web applications
+- Proficiency in modern CSS (Tailwind CSS, CSS Modules, or Styled Components)
+- Experience with REST APIs and GraphQL
+- Bachelor's degree in Computer Science or related field
+- Strong communication and collaboration skills
+
+Preferred Qualifications
+- Experience with Next.js or similar React framework
+- Familiarity with cloud platforms (AWS or GCP)
+- Experience with CI/CD pipelines and DevOps practices
+- Knowledge of performance optimization techniques (code splitting, lazy loading)
+- Experience with testing frameworks (Jest, React Testing Library, Cypress)
+- Full-stack experience with Node.js or Python
+
+Responsibilities
+- Lead the development of new features for our React-based web application
+- Collaborate with UX designers to translate mockups into pixel-perfect implementations
+- Mentor junior developers through code reviews and pair programming
+- Optimize application performance and user experience
+- Contribute to architectural decisions and technical strategy
+
+We offer competitive salary, remote-first culture, and opportunities for growth. If you are passionate about building great user experiences, we'd love to hear from you.

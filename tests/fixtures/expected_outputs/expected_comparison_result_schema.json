@@ -1,0 +1,20 @@
+{
+  "type": "comparison | explanation | questions | refinement_delta | single_candidate | error",
+  "candidates": [
+    {
+      "id": "string",
+      "name": "string",
+      "scores": {
+        "overall": "float",
+        "must_have": "float",
+        "nice_to_have": "float"
+      },
+      "highlights": ["string"],
+      "red_flags": ["string"]
+    }
+  ],
+  "comparison_table": {
+    "CriterionName": ["value_for_candidate_1", "value_for_candidate_2", "..."]
+  },
+  "summary": "string (non-empty)"
+}

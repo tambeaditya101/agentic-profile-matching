@@ -1,0 +1,39 @@
+stateDiagram-v2
+    [*] --> ParseJD
+
+    ParseJD --> ExtractRequirements: validated raw_jd
+    ParseJD --> [*]: too short / empty
+
+    ExtractRequirements --> SearchResumes
+
+    SearchResumes --> RankCandidates
+
+    note right of RankCandidates
+        3-round screening pipeline:
+          Round 1: RAG + keyword filter → top 10
+          Round 2: deep analysis + red flags → top 5–7
+          Round 3: hire / no-hire / borderline
+    end note
+
+    RankCandidates --> GenerateReport
+
+    GenerateReport --> HumanFeedbackLoop: awaiting_human_feedback = true
+
+    state HumanFeedbackLoop {
+        [*] --> ClassifyIntent
+        ClassifyIntent --> RefineRequirements: refine
+        ClassifyIntent --> CompareCandidates: compare
+        ClassifyIntent --> GenerateQuestions: questions
+        ClassifyIntent --> ExplainRanking: explain
+        ClassifyIntent --> GenerateReport: report
+        ClassifyIntent --> [*]: done / new_search
+    }
+
+    RefineRequirements --> RankCandidates: re-rank + delta summary
+    CompareCandidates --> HumanFeedbackLoop: show comparison
+    GenerateQuestions --> HumanFeedbackLoop: show questions
+    ExplainRanking --> HumanFeedbackLoop: show explanation
+    GenerateReport --> HumanFeedbackLoop: show report
+
+    HumanFeedbackLoop --> [*]: done
+    HumanFeedbackLoop --> ParseJD: new_search

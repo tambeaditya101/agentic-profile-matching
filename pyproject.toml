@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentic-profile-matching"
+version = "0.1.0"
+description = "LangGraph-based AI agent for candidate-job profile matching with multi-round screening and explainability"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = [
+    # Agent framework
+    "langgraph>=0.2.0",
+    "langchain-core>=0.3.0",
+    # LLM — 4-tier fallback: Gemini Free → Groq Free → Ollama → Keyword fallback
+    "langchain-google-genai>=1.0.0",
+    "langchain-groq>=0.1.6",
+    "langchain-community>=0.3.0",
+    # RAG — ChromaDB's built-in ONNX embeddings (no PyTorch needed)
+    "langchain-chroma>=0.1.0",
+    "chromadb>=0.5.0",
+    # Validation
+    "pydantic>=2.0.0",
+    # UI
+    "streamlit>=1.35.0",
+    "click>=8.1.0",
+    # PDF parsing
+    "PyMuPDF>=1.24.0",
+    # Env
+    "python-dotenv>=1.0.0",
+    # Testing
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.5.0",
+    "mypy>=1.10.0",
+    "mermaid-py>=0.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+markers = [
+    "integration: tests that require a working LLM API (Gemini or Ollama)",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100

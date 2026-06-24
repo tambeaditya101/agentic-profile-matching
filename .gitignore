@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables (KEEP IGNORED — has your API keys)
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Streamlit secrets (if you ever use them)
+.streamlit/secrets.toml
+
+# NOTE: We intentionally COMMIT the following so reviewers can run immediately:
+#   data/resumes/*.pdf      (4 sample resumes, ~8 KB)
+#   data/chroma_db/         (pre-built vector index, ~400 KB)
+#   tests/fixtures/         (sample JD + expected outputs)
+#   docs/state_machine_diagram.png  (visual deliverable)

@@ -1,0 +1,43 @@
+# Streamlit configuration for Agentic Profile Matching
+# Docs: https://docs.streamlit.io/library/advanced-features/configuration
+
+[server]
+# Run headless so the browser doesn't auto-open on servers / CI
+headless = true
+# Default port (Streamlit's default is 8501)
+port = 8501
+# Bind to localhost only by default (change to 0.0.0.0 to expose on LAN)
+address = "127.0.0.1"
+# Suppress the "Are you sure you want to exit?" prompt
+runOnSave = false
+
+[browser]
+# Don't auto-open the browser; user opens http://localhost:8501 manually
+gatherUsageStats = false
+
+[runner]
+# This is the key fix: Streamlit's hot-reload watcher walks every installed
+# module to find local source files. When it hits `transformers` (pulled in
+# by ChromaDB for ONNX embeddings), dozens of submodules try to import
+# `torchvision` (which is NOT installed and NOT needed by this project).
+# Those import failures spam the console with scary-looking tracebacks.
+# Setting `fileWatcherType = "none"` disables the local-sources watcher
+# entirely — you'll still get auto-reload on file changes via the simpler
+# polling watcher, but without the noisy transformers introspection.
+fileWatcherType = "none"
+
+# Magic: show output as the user types (disabled for cleaner CLI output)
+magicEnabled = false
+
+[logger]
+# Reduce log noise
+level = "INFO"
+messageFormat = "%(asctime)s %(message)s"
+
+[ui]
+# Hide the "Made with Streamlit" footer
+hideTopBar = false
+
+[client]
+# Cache state across reruns
+toolbarMode = "minimal"

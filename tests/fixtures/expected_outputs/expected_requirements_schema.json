@@ -1,0 +1,22 @@
+{
+  "raw_jd": "string (non-empty)",
+  "must_have": [
+    {
+      "skill": "string (non-empty)",
+      "type": "tech | soft | domain | certification | language",
+      "weight": "float in [0.0, 1.0]",
+      "evidence": "string"
+    }
+  ],
+  "nice_to_have": [
+    {
+      "skill": "string (non-empty)",
+      "type": "tech | soft | domain | certification | language",
+      "weight": "float in [0.0, 1.0]",
+      "evidence": "string"
+    }
+  ],
+  "experience_min_years": "int | null",
+  "education_level": "string | null",
+  "domain_keywords": ["string", "..."]
+}

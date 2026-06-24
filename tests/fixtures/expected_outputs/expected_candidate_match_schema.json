@@ -1,0 +1,13 @@
+{
+  "candidate_id": "string (non-empty)",
+  "name": "string (non-empty)",
+  "score": "float in [0.0, 1.0]",
+  "must_have_score": "float in [0.0, 1.0]",
+  "nice_to_have_score": "float in [0.0, 1.0]",
+  "reasoning": "string (non-empty)",
+  "strengths": ["string", "..."],
+  "gaps": ["string", "..."],
+  "resume_excerpts": ["string", "..."],
+  "hire_recommendation": "hire | no_hire | borderline",
+  "improvement_suggestions": ["string", "..."]
+}

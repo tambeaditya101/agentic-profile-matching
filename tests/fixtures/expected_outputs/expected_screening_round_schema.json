@@ -1,0 +1,8 @@
+{
+  "round_number": "int (1 | 2 | 3)",
+  "round_type": "initial | deep_analysis | final",
+  "candidates_evaluated": "int >= 0",
+  "shortlisted_ids": ["string (candidate_id)"],
+  "eliminated_ids": ["string (candidate_id)"],
+  "notes": "string (non-empty)"
+}
