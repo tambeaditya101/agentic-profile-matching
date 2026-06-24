@@ -9,6 +9,9 @@ build/
 .eggs/
 *.egg
 
+docs/demo_script.md
+docs/demo_video_guide.md
+
 # Virtual environments
 .venv/
 venv/
