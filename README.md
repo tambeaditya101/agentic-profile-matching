@@ -1,6 +1,6 @@
 # Agentic Profile Matching
 
-An **AI-powered candidate-job matching agent** built with **LangGraph** that takes a job description (JD), retrieves matching candidates from a resume corpus via RAG, runs them through a 3-round screening pipeline, and provides full explainability of every ranking decision — all on **free-tier infrastructure** (Gemini Free / Ollama / ChromaDB local).
+An **AI-powered candidate-job matching agent** built with **LangGraph** that takes a job description (JD), retrieves matching candidates from a resume corpus via RAG, runs them through a 3-round screening pipeline, and provides full explainability of every ranking decision — all on **free-tier infrastructure** (Groq / Gemini / Ollama / ChromaDB local, with keyword fallback for no-LLM scenarios).
 
 ```
 START → Parse JD → Extract Requirements → Search Resumes → Rank Candidates
@@ -77,7 +77,7 @@ Open **http://localhost:8501** in your browser. You should see the chat interfac
 
 ### Optional — LLM Providers (set at least one for AI-powered analysis)
 
-The agent has a **4-tier fallback chain**: Gemini → Groq → Ollama → Keyword fallback. Set as many as you want — if one fails (e.g., quota exhausted), the next takes over automatically.
+The agent has a **4-tier fallback chain**: Groq → Gemini → Ollama → Keyword fallback. Set as many as you want — if one fails (e.g., quota exhausted), the next takes over automatically.
 
 | Provider | Free Tier | Why | Get a Key |
 |----------|-----------|-----|-----------|
@@ -556,8 +556,9 @@ pytest tests/ -q
 │ data/      │ │ LLM Provider       │
 │ chroma_db/ │ │ src/llm/client.py  │
 │ resumes/   │ │                    │
-│ reports/   │ │ Gemini Free (1°)   │
-└────────────┘ │ Ollama (2°)        │
+│ reports/   │ │ Groq (1°)          │
+└────────────┘ │ Gemini (2°)        │
+               │ Ollama (3°)        │
                │ Keyword fallback   │
                └────────────────────┘
 ```

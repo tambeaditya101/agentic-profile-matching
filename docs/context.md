@@ -1,5 +1,10 @@
 # Agentic Profile Matching — Problem Statement & Requirements
 
+> **Version**: 1.2
+> **Last Updated**: 2026-06-24
+>
+> **v1.2**: Updated LLM provider chain to 4-tier fallback (Groq → Gemini → Ollama → keyword fallback). Added keyword-based fallback for requirement extraction so the pipeline works with no LLM at all.
+
 ## Project Overview
 
 Build an **AI-powered candidate-job matching agent** using **LangGraph** that intelligently matches job descriptions (JDs) to candidate resumes from a document corpus. The agent must support multi-round screening, natural language interaction, and full explainability of its ranking decisions.
@@ -73,13 +78,13 @@ The agent should interpret intent, route to the appropriate tool(s), and return 
 
 ## Submission Guidelines
 
-| Deliverable | Description |
-|-------------|-------------|
-| LangGraph agent implementation | `matching_agent.py` — the full graph-based agent |
-| State machine diagram | Visual representation of the agent graph |
-| Chat interface | CLI or Streamlit/Gradio frontend |
-| Test scenarios | 5+ documented conversation flows |
-| Demo video | 5–6 minutes showing agent reasoning in action |
+| Deliverable | Description | Delivered As |
+|-------------|-------------|--------------|
+| LangGraph agent implementation | `matching_agent.py` — the full graph-based agent | `matching_agent.py` (project root) |
+| State machine diagram | Visual representation of the agent graph | `docs/state_machine_diagram.png` + `.svg` + `.mmd` |
+| Chat interface | CLI or Streamlit/Gradio frontend | Both: `ui/streamlit_app.py` (primary) + `ui/cli_app.py` (fallback) |
+| Test scenarios | 5+ documented conversation flows | `tests/test_agent_flows.py` — 7 scenarios, 35 tests |
+| Demo video | 5–6 minutes showing agent reasoning in action | `docs/demo_video_guide.md` (recording script) |
 
 ---
 
@@ -87,7 +92,7 @@ The agent should interpret intent, route to the appropriate tool(s), and return 
 
 - **Framework**: LangGraph (Python)
 - **Retrieval**: RAG over a corpus of resumes (from Milestone 2)
-- **Interface**: CLI, Streamlit, or Gradio
+- **Interface**: CLI, Streamlit, or Gradio (this project delivers both CLI and Streamlit)
 - **Scope**: Single JD matching against a resume corpus per session
 - **Language**: Python 3.11+
 
@@ -98,24 +103,40 @@ The agent should interpret intent, route to the appropriate tool(s), and return 
 The entire project must be **buildable, runnable, and demonstrable using free-tier or open-source resources only**. This is a non-negotiable project constraint.
 
 - **No paid services, subscriptions, or paid APIs.** Every dependency must be free or open-source.
-- **LLM**: Gemini API (Free Tier) is the primary provider. Ollama (local models) is the fallback for fully offline operation.
+- **LLM**: 4-tier fallback chain (tried in order, first working provider wins):
+  1. **Groq Free Tier** (primary, recommended) — Llama 3.3 70B, 30 RPM, 14,400 req/day. Fastest inference via LPU. Get a free key at https://console.groq.com/keys
+  2. **Gemini Free Tier** (secondary) — Gemini 2.0 Flash, 15 RPM, 1,500 req/day. Get a free key at https://aistudio.google.com/apikey
+  3. **Ollama** (offline fallback) — gemma2:9b running locally, unlimited requests, no API key. Install at https://ollama.com
+  4. **Keyword fallback** (always available) — deterministic keyword-based extraction and scoring, no LLM required. Lower quality but the pipeline is fully functional.
 - **Embeddings**: ChromaDB's built-in ONNX embedding function (local) — zero cost, no API key, no rate limits. Ships with ChromaDB, no extra install.
 - **Vector Database**: ChromaDB (local, embedded) — no hosted services.
 - **Infrastructure**: All local — SQLite/ChromaDB, local file storage, in-memory caching. No managed cloud services.
 - **Decision policy**: Before introducing any new dependency, verify it is free. If multiple options exist, choose the one that best balances zero cost, developer experience, performance, and maintainability. If a feature cannot be implemented without payment, document the limitation explicitly rather than silently introducing a paid dependency.
 
+### Graceful Degradation
+
+A key design principle is **graceful degradation**: if no LLM is available (e.g., in an air-gapped enterprise environment, or all free-tier quotas are exhausted), the agent still produces ranked shortlists and match reports using keyword-based heuristics. The LLM enhances quality but is not a hard dependency. Every LLM-powered tool has a deterministic fallback:
+
+| Tool | LLM-powered output | Keyword-fallback output |
+|------|-------------------|------------------------|
+| `extract_requirements` | Structured must-have/nice-to-have with LLM reasoning | Regex-based skill extraction from curated dictionary |
+| `score_candidate` | Narrative reasoning with evidence excerpts | Keyword match count + gap detection |
+| `compare_candidates` | Narrative comparison summary | Raw score table |
+| `explain_ranking` | Narrative explanation citing specific evidence | Score-based comparison |
+| `generate_interview_questions` | Creative questions with follow-ups | Gap-targeted template questions |
+
 ### Reviewer Cloneability
 
-The project must be **cloneable by any reviewer** who should be able to run it locally after adding **only freely obtainable API keys** (if required). No paid accounts, premium services, or proprietary infrastructure should be necessary. A reviewer with `git clone`, `pip install`, and a free Gemini API key (or Ollama installed locally) must be able to run every feature end-to-end.
+The project must be **cloneable by any reviewer** who should be able to run it locally after adding **only freely obtainable API keys** (if required). No paid accounts, premium services, or proprietary infrastructure should be necessary. A reviewer with `git clone`, `pip install`, and a free Groq or Gemini API key (or Ollama installed locally, or nothing at all for keyword-fallback mode) must be able to run every feature end-to-end.
 
 ---
 
 ## Success Criteria
 
-1. The agent correctly parses a JD into structured requirements
-2. The agent retrieves and ranks candidates using RAG + scoring logic
-3. Users can interact conversationally and iteratively refine searches
-4. Multi-round screening produces progressively deeper analysis
-5. Every ranking decision is explainable (match reports with evidence)
-6. The graph structure is clearly visualized and documented
-7. At least 5 test conversation flows pass end-to-end
+1. The agent correctly parses a JD into structured requirements ✅
+2. The agent retrieves and ranks candidates using RAG + scoring logic ✅
+3. Users can interact conversationally and iteratively refine searches ✅
+4. Multi-round screening produces progressively deeper analysis ✅
+5. Every ranking decision is explainable (match reports with evidence) ✅
+6. The graph structure is clearly visualized and documented ✅
+7. At least 5 test conversation flows pass end-to-end ✅ (7 scenarios, 35 tests)

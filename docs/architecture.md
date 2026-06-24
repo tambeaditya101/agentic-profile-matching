@@ -1,8 +1,10 @@
 # Agentic Profile Matching — Architecture Document
 
 > **Derived from**: `docs/context.md`
-> **Version**: 1.1
+> **Version**: 1.2
 > **Last Updated**: 2026-06-24
+>
+> **v1.2**: Added Groq as primary LLM provider (4-tier fallback: Groq → Gemini → Ollama → keyword fallback). Added keyword-based fallback for `extract_requirements` and `score_candidate`. Added runtime LLM call tracker with `get_llm_status()` and `record_llm_call()`. Added LLM status badge to UI. Added `matching_agent.py` entry point, `.streamlit/config.toml`, state machine diagram (PNG/SVG/MMD), demo video guide. Updated test count to 388 passing tests.
 >
 > **v1.1**: Replaced all paid-service dependencies (OpenAI) with free-tier/open-source alternatives (Gemini Free Tier, Hugging Face local embeddings, Ollama fallback). Fixed non-ASCII field name in `ScreeningRound`.
 
@@ -83,12 +85,12 @@ The **Agentic Profile Matching** system is a LangGraph-based autonomous agent th
                            │
               ┌────────────┼────────────┐
               ▼            ▼            ▼
-       ┌────────────┐ ┌────────┐ ┌───────────┐
-       │  Vector DB │ │ File   │ │  LLM      │
-       │  (Resumes) │ │ System │ │  (Gemini  │
-       │            │ │        │ │   Free /  │
-       │            │ │        │ │  Ollama)  │
-       └────────────┘ └────────┘ └───────────┘
+       ┌────────────┐ ┌────────┐ ┌───────────────────┐
+       │  Vector DB │ │ File   │ │  LLM (4-tier)     │
+       │  (Resumes) │ │ System │ │  Groq → Gemini    │
+       │            │ │        │ │  → Ollama         │
+       │            │ │        │ │  → keyword fallback│
+       └────────────┘ └────────┘ └───────────────────┘
 ```
 
 The architecture follows a **three-tier** pattern:
@@ -935,12 +937,14 @@ When a user asks "Why did X rank higher than Y?", the agent:
 |---|---|---|---|---|
 | Agent Framework | LangGraph | 0.2+ | Free (MIT) | Graph-based agent orchestration |
 | LLM Integration | LangChain Core | 0.3+ | Free (MIT) | Tool definitions, message types |
-| LLM Provider (primary) | Gemini 2.0 Flash | — | Free Tier (15 RPM, 1M tokens/min, 1500 RPD) | Primary reasoning engine via `langchain-google-genai` |
-| LLM Provider (fallback) | Ollama (gemma2:9b) | — | Free (local) | Fully offline operation, no API key needed |
+| LLM Provider (1°) | Groq (Llama 3.3 70B) | — | Free Tier (30 RPM, 14,400 RPD) | Primary reasoning engine via `langchain-groq`. Fastest inference (LPU-based), highest free quota. |
+| LLM Provider (2°) | Gemini 2.0 Flash | — | Free Tier (15 RPM, 1,500 RPD) | Secondary reasoning engine via `langchain-google-genai`. Falls back here if Groq fails/quota exhausted. |
+| LLM Provider (3°) | Ollama (gemma2:9b) | — | Free (local) | Fully offline operation, no API key needed. Falls back here if both cloud providers fail. |
+| LLM Provider (4°) | Keyword fallback | — | Free (always available) | Deterministic keyword-based extraction/scoring. No LLM required. Last resort when all LLMs unavailable. |
 | Embeddings | ChromaDB built-in ONNX (all-MiniLM-L6-v2) | — | Free (local, ships with ChromaDB, no extra install) | Resume text embeddings |
 | Vector Store | ChromaDB | 0.5+ | Free (Apache-2.0) | Local embedded resume embedding storage |
-| Interface | Streamlit | 1.35+ | Free (Apache-2.0) | Web-based chat UI (primary) |
-| CLI Fallback | Click | 8.1+ | Free (BSD-3) | Command-line interface |
+| Interface (primary) | Streamlit | 1.35+ | Free (Apache-2.0) | Web-based chat UI |
+| Interface (fallback) | Click | 8.1+ | Free (BSD-3) | Command-line interface |
 | PDF Parsing | PyMuPDF | 1.24+ | Free (AGPL) | Extracting text from resume PDFs |
 | Data Validation | Pydantic | 2.0+ | Free (MIT) | Structured output validation |
 | Testing | Pytest | 8.0+ | Free (MIT) | Unit and integration tests |
@@ -950,10 +954,13 @@ When a user asks "Why did X rank higher than Y?", the agent:
 
 | Decision | Rationale |
 |----------|----------|
-| **Gemini 2.0 Flash** over GPT-4o | Free tier with structured output support, no credit card required, sufficient for all agent reasoning tasks |
-| **Ollama fallback** | Enables fully offline demos; reviewer needs no API key at all if they install Ollama |
+| **Groq as primary** over Gemini | 10x higher free tier quota (14,400 vs 1,500 req/day), 6x faster inference (LPU vs TPU), Llama 3.3 70B quality comparable to Gemini Flash |
+| **4-tier fallback chain** | Maximizes reliability — if Groq's quota is exhausted, Gemini takes over; if Gemini fails, Ollama runs locally; if no LLM at all, keyword fallback keeps the pipeline functional |
+| **Keyword fallback** for `extract_requirements` | Enables fully offline demos with zero LLM dependency. Quality is lower (regex-based skill matching) but the pipeline produces ranked shortlists and reports. |
+| **Runtime LLM call tracker** | `record_llm_call()` tracks every actual LLM invoke (success/failure/duration). `get_llm_status()` combines startup ping + runtime stats for a truly dynamic status badge — if quota exhausts mid-session, the badge turns yellow and shows the failure. |
 | **ChromaDB built-in ONNX embeddings** over HuggingFace/sentence-transformers | Same model (all-MiniLM-L6-v2), but ships inside ChromaDB via ONNX Runtime — no PyTorch, no 2.5 GB download, no extra pip install |
 | **ChromaDB local** over Pinecone/Weaviate | Embedded mode needs no server, no account, no network — just a local directory |
+| **Both Streamlit and CLI** | Streamlit is the primary interface for demos; CLI is a fallback for headless environments and reviewers who prefer terminals |
 
 ### Dependency Graph
 
@@ -961,7 +968,9 @@ When a user asks "Why did X rank higher than Y?", the agent:
 matching_agent.py
     ├── langgraph (StateGraph, MessageGraph)
     ├── langchain-core (BaseMessage, @tool, ChatPromptTemplate)
-    ├── langchain-google-genai (ChatGoogleGenerativeAI)   # Gemini Free Tier
+    ├── langchain-groq (ChatGroq)                  # Groq Free Tier (primary)
+    ├── langchain-google-genai (ChatGoogleGenerativeAI)  # Gemini Free Tier (secondary)
+    ├── langchain-community (ChatOllama)           # Ollama (offline fallback)
     ├── chromadb (Collection, query + built-in ONNX embeddings)
     ├── pydantic (BaseModel, model_validator)
     ├── streamlit (st.chat_message, st.sidebar)
@@ -974,79 +983,105 @@ matching_agent.py
 
 ```
 agentic-profile-matching/
+├── matching_agent.py                # ← Submission entry point (python matching_agent.py streamlit|cli)
+├── pyproject.toml                   # Project metadata + dependencies (pip install -e .)
+├── .env.example                     # Template for API keys (GROQ_API_KEY, GEMINI_API_KEY, etc.)
+├── .env                             # Your actual API keys (gitignored)
+├── .gitignore
+├── .streamlit/
+│   └── config.toml                  # Suppresses transformers/torchvision watcher warnings
+├── README.md                        # User-facing setup + feature walkthrough
+├── worklog.md                       # Multi-agent work log (8 phases documented)
+│
 ├── docs/
-│   ├── context.md                    # Problem statement (this file's source)
-│   └── architecture.md               # This document
+│   ├── context.md                   # Problem statement & requirements (v1.2)
+│   ├── architecture.md              # This document (v1.2)
+│   ├── implementation-plan.md       # 8-phase plan (v1.2)
+│   ├── state_machine_diagram.png    # Visual graph diagram (1384×1075)
+│   ├── state_machine_diagram.svg    # Vector version
+│   ├── state_machine_diagram.mmd    # Mermaid source
+│   ├── demo_script.md               # 5-6 min demo walkthrough script
+│   └── demo_video_guide.md          # Recording guide for demo video
+│
 ├── src/
 │   ├── __init__.py
 │   ├── agent/
 │   │   ├── __init__.py
-│   │   ├── matching_agent.py         # Main LangGraph agent definition
-│   │   ├── state.py                  # AgentState TypedDict definition
-│   │   ├── nodes.py                  # All graph node functions
-│   │   ├── edges.py                  # Edge routing / conditional logic
-│   │   └── graph.py                  # StateGraph construction and compilation
+│   │   ├── state.py                 # AgentState TypedDict (14 fields)
+│   │   ├── models.py                # Pydantic schemas for LLM structured output
+│   │   ├── nodes.py                 # 5 linear + 6 interactive node functions
+│   │   ├── edges.py                 # Conditional routing logic (route_feedback, etc.)
+│   │   └── graph.py                 # StateGraph construction + compile()
 │   ├── tools/
 │   │   ├── __init__.py
-│   │   ├── extract_requirements.py   # JD parsing tool
-│   │   ├── rag_search.py             # RAG retrieval tool
-│   │   ├── compare_candidates.py     # Head-to-head comparison tool
-│   │   ├── generate_questions.py     # Interview question generation tool
-│   │   └── file_tools.py             # File system tools (from Milestone 1)
+│   │   ├── extract_requirements.py  # JD parsing tool (LLM + keyword fallback)
+│   │   ├── rag_search.py            # RAG retrieval tool
+│   │   ├── compare_candidates.py    # Head-to-head comparison tool
+│   │   ├── generate_questions.py    # Interview question generation tool
+│   │   └── file_tools.py            # File system tools (from Milestone 1)
 │   ├── scoring/
 │   │   ├── __init__.py
-│   │   ├── scorer.py                 # Candidate scoring logic
-│   │   ├── ranker.py                 # Ranking and sorting
-│   │   └── red_flags.py             # Red-flag detection
+│   │   ├── scorer.py                # Candidate scoring (LLM + keyword fallback)
+│   │   ├── ranker.py                # Ranking, filtering, shortlisting
+│   │   └── red_flags.py             # Red-flag detection (gaps, job-hopping)
 │   ├── screening/
 │   │   ├── __init__.py
-│   │   ├── round1_initial.py         # Initial broad screen
-│   │   ├── round2_deep.py            # Deep analysis
-│   │   ├── round3_final.py           # Final recommendation
-│   │   └── pipeline.py               # Orchestrates all 3 rounds
+│   │   ├── round1_initial.py        # Round 1: broad RAG + keyword filter → top 10
+│   │   ├── round2_deep.py           # Round 2: deep analysis + red flags → top 5-7
+│   │   ├── round3_final.py          # Round 3: hire/no-hire recommendation
+│   │   └── pipeline.py              # Orchestrates all 3 rounds
 │   ├── reports/
 │   │   ├── __init__.py
-│   │   ├── match_report.py           # Per-candidate report generation
-│   │   └── comparison_report.py      # Head-to-head comparison report
+│   │   └── match_report.py          # Per-candidate markdown report generation
 │   ├── rag/
 │   │   ├── __init__.py
-│   │   ├── indexer.py                # Resume ingestion and embedding
-│   │   ├── retriever.py              # Query and retrieval logic
-│   │   └── store.py                  # Vector store setup and management
-│   └── prompts/
+│   │   ├── indexer.py               # Resume ingestion and embedding
+│   │   ├── retriever.py             # Query and retrieval logic
+│   │   └── store.py                 # Vector store setup and management
+│   ├── prompts/
+│   │   ├── __init__.py
+│   │   ├── extraction.py            # Prompt for requirement extraction
+│   │   ├── scoring.py               # Prompt for candidate scoring
+│   │   ├── comparison.py            # Prompt for candidate comparison
+│   │   ├── questions.py             # Prompt for interview question gen
+│   │   ├── explanation.py           # Prompt for ranking explanation
+│   │   └── intent.py                # Prompt for intent classification (Phase 5)
+│   └── llm/
 │       ├── __init__.py
-│       ├── extraction.py             # Prompts for requirement extraction
-│       ├── scoring.py                # Prompts for candidate scoring
-│       ├── comparison.py             # Prompts for candidate comparison
-│       ├── questions.py              # Prompts for interview question gen
-│       └── explanation.py            # Prompts for ranking explanation
+│       └── client.py                # 4-tier LLM client + runtime call tracker
+│
 ├── ui/
 │   ├── __init__.py
-│   ├── streamlit_app.py              # Streamlit chat interface
-│   ├── cli_app.py                    # CLI interface (Click/Typer)
-│   └── components.py                 # Shared UI components
+│   ├── streamlit_app.py             # Streamlit chat interface (primary)
+│   ├── cli_app.py                   # CLI interface (Click-based, fallback)
+│   └── components.py                # Shared rendering helpers (12 renderers)
+│
 ├── tests/
 │   ├── __init__.py
-│   ├── test_tools.py                 # Unit tests for tools
-│   ├── test_scoring.py               # Unit tests for scoring
-│   ├── test_screening.py             # Integration tests for screening pipeline
-│   ├── test_agent_flows.py           # End-to-end conversation flow tests
+│   ├── test_setup.py                # Phase 0: environment smoke tests
+│   ├── test_rag.py                  # Phase 1: RAG indexing/retrieval
+│   ├── test_state.py                # Phase 2: state + Pydantic models
+│   ├── test_tools.py                # Phase 3: tool unit tests
+│   ├── test_nodes.py                # Phase 4: node unit tests
+│   ├── test_graph_linear.py         # Phase 4: linear graph integration
+│   ├── test_intent_classification.py # Phase 5: intent classification
+│   ├── test_conversation_flows.py   # Phase 5: interactive loop tests
+│   ├── test_screening.py            # Phase 6: 3-round screening pipeline
+│   ├── test_ui.py                   # Phase 7: UI component tests
+│   ├── test_agent_flows.py          # Phase 8: 7 end-to-end scenarios (35 tests)
 │   └── fixtures/
-│       ├── sample_jd.txt             # Sample job description
-│       ├── sample_resumes/           # Test resume files
-│       └── expected_outputs/          # Expected test outputs
-├── data/
-│   ├── resumes/                      # Resume corpus (PDFs)
-│   ├── job_descriptions/             # JD files
-│   └── chroma_db/                    # Persistent vector store
+│       ├── sample_jd.txt            # Standard test JD (Senior React Developer)
+│       ├── sample_resumes/          # 4 sample resume PDFs
+│       └── expected_outputs/        # Schema reference files for regression testing
+│
 ├── scripts/
-│   ├── ingest_resumes.py             # Script to build the vector index
-│   └── run_agent.py                  # Script to launch the agent
-├── pyproject.toml                    # Project metadata and dependencies
-├── requirements.txt                  # Pinned dependencies
-├── .env                              # API keys (not committed)
-├── .gitignore
-└── README.md
+│   ├── ingest_resumes.py            # Index PDFs into ChromaDB
+│   └── generate_sample_resumes.py   # Generate synthetic test resumes
+│
+└── data/
+    ├── resumes/                     # Resume corpus (4 sample PDFs included)
+    ├── chroma_db/                   # Persistent vector store (pre-built)
+    └── reports/                     # Exported match reports (auto-created, gitignored)
 ```
 
 ---
@@ -1141,12 +1176,15 @@ Agent: Session complete. Reports saved to data/reports/.
 
 | Error Type | Detection | Recovery |
 |---|---|---|
-| **Empty JD** | `parse_jd` validates `raw_jd` is non-empty | Prompt user to provide JD text |
+| **Empty JD** | `parse_jd` validates `raw_jd` is non-empty (min 20 chars) | Prompt user to provide JD text |
 | **No candidates found** | `search_resumes` returns empty list | Suggest broadening requirements or checking resume corpus |
-| **LLM hallucination in scoring** | Score > 1.0 or negative | Clamp score, log warning, re-prompt if repeated |
+| **LLM quota exhausted (429)** | `_ping_gemini()` / `_ping_groq()` returns 429 error | Automatically fall back to next provider in the 4-tier chain |
+| **LLM key invalid (403/400)** | Startup ping fails with auth error | Show 🔴 badge with exact error; fall back to next provider or keyword fallback |
+| **LLM hallucination in scoring** | Score > 1.0 or negative | Clamp score to [0.0, 1.0], log warning |
 | **Invalid tool arguments** | Pydantic validation on tool input | Return error message to user with correct usage |
 | **Stuck in feedback loop** | Counter exceeds 20 iterations | Force exit with summary of current state |
 | **Resume parsing failure** | Empty content from PDF | Log and skip candidate, note in report |
+| **All LLMs unavailable** | `_do_startup_ping()` returns `keyword_fallback` | Use keyword-based extraction/scoring; show 🔴 badge with guidance |
 
 ### 15.2 Guard Rails
 
@@ -1155,6 +1193,9 @@ Agent: Session complete. Reports saved to data/reports/.
 - **Tool timeout**: Each tool call has a 30-second timeout; on failure, the agent returns a graceful error message
 - **State immutability**: Nodes return new state objects; no in-place mutation of shared references
 - **Conversation window**: Only the last 50 messages are kept in context to prevent token overflow
+- **4-tier LLM fallback**: Groq → Gemini → Ollama → keyword fallback. Each provider is pinged with a tiny "Reply with: OK" prompt before being used. If a provider fails mid-session, the runtime call tracker detects it and the status badge turns yellow.
+- **Runtime LLM call tracking**: `record_llm_call(provider, success, error, tool, duration_ms)` is called after every LLM invoke. `get_llm_status()` combines the startup ping with runtime stats — if >50% of recent calls fail, the badge automatically downgrades from 🟢 to 🟡.
+- **Graceful degradation**: Every LLM-dependent tool (`extract_requirements`, `score_candidate`, `compare_candidates`, `generate_interview_questions`, `explain_ranking`) has a deterministic keyword-based fallback that produces output without an LLM.
 
 ---
 
@@ -1243,13 +1284,18 @@ def test_no_results_edge_case(agent):
 
 ### 16.3 Coverage Targets
 
-| Layer | Target Coverage |
-|---|---|
-| Tools (unit) | 90%+ |
-| Scoring logic (unit) | 95%+ |
-| Screening pipeline (integration) | 80%+ |
-| Agent flows (end-to-end) | 100% of defined scenarios |
-| State management (unit) | 85%+ |
+| Layer | Target Coverage | Actual Coverage |
+|---|---|---|
+| Tools (unit) | 90%+ | ~75% (rag_search 96%, file_tools 80%; LLM-using tools lower because their LLM call branches require a live LLM) |
+| Scoring logic (unit) | 95%+ | ~95% (ranker 100%, red_flags 94%, scorer 74% — scorer's LLM call paths need a live LLM) |
+| Screening pipeline (integration) | 80%+ | 89-100% (pipeline 100%, round1 89%, round2 91%, round3 94%) |
+| Agent flows (end-to-end) | 100% of defined scenarios | 100% (all 7 scenarios pass, 35 tests) |
+| State management (unit) | 85%+ | 93-100% (state 100%, models 100%, edges 95%, graph 93%) |
+| UI components | 85%+ | 90% (components.py 90%, cli_app.py 44% — CLI REPL paths hard to test, streamlit_app.py 9% — Streamlit runtime needed) |
+
+**Overall coverage**: 76% (2,454 statements, 593 missed — mostly LLM call branches that require a live API).
+
+**Test count**: 388 tests pass (excluding 9 `@pytest.mark.integration` tests that require a live LLM). Run `pytest tests/ -q -m "not integration"` to verify.
 
 ---
 
@@ -1259,10 +1305,15 @@ def test_no_results_edge_case(agent):
 |---|---|
 | **TypedDict over Pydantic for state** | LangGraph natively supports TypedDict; Pydantic used only for tool input/output validation |
 | **Composite score = 0.7 × must_have + 0.3 × nice_to_have** | Must-have criteria are the primary filter; nice-to-have breaks ties |
+| **4-tier LLM fallback (Groq → Gemini → Ollama → keyword)** | Maximizes reliability. Groq has the highest free quota (14,400 req/day) and is fastest. If it fails, Gemini takes over. If both cloud providers fail, Ollama runs locally. If no LLM at all, keyword fallback keeps the pipeline functional. |
+| **Groq as primary** over Gemini | 10x higher free tier quota, 6x faster inference, Llama 3.3 70B quality comparable to Gemini Flash |
+| **Keyword fallback for all LLM tools** | Enables fully offline demos with zero LLM dependency. The pipeline produces ranked shortlists and reports even with no API keys. |
+| **Runtime LLM call tracker** | `record_llm_call()` + `get_llm_status()` provide a truly dynamic status badge — if quota exhausts mid-session, the badge turns yellow and shows the exact error. No more false greens. |
 | **Mermaid for state diagram** | Widely supported, renders in GitHub/Streamlit/VS Code, and can be exported to PNG |
-| **Streamlit as primary UI** | Fastest to build for chat interfaces; Gradio as alternative |
+| **Streamlit as primary UI + CLI as fallback** | Streamlit is best for demos; CLI works in headless environments and for reviewers who prefer terminals |
 | **ChromaDB as vector store** | Local-first, no external service dependency, sufficient for ~1000 resumes |
 | **Message window of 50** | Balances context richness with token cost (~8k tokens for history) |
+| **Both Streamlit and CLI share `ui/components.py`** | 12 format-agnostic renderers ensure both UIs display identical content |
 
 ## Appendix B: Glossary
 
